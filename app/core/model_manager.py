@@ -55,19 +55,23 @@ class ModelManager:
 
     async def get_acestep(self):
         if "acestep" not in self.models:
-            # ACE-Step has multiple components in GGUF. We'll download the main LM for now.
-            # In a full implementation, we'd need the DiT part too for synthesis.
             path = await self.download_model(
                 repo_id="Serveurperso/ACE-Step-1.5-GGUF",
                 filename="acestep-5Hz-lm-4B-Q8_0.gguf",
                 key="acestep"
             )
             logger.info(f"Loading ACE-Step GGUF from {path}...")
-            self.models["acestep"] = Llama(
-                model_path=path,
-                n_gpu_layers=-1,
-                verbose=False
-            )
+            try:
+                self.models["acestep"] = Llama(
+                    model_path=path,
+                    n_gpu_layers=-1,
+                    n_ctx=4096, # Increased context window
+                    verbose=True # Enabled verbose for more detailed loading info
+                )
+                logger.info("ACE-Step GGUF loaded successfully.")
+            except Exception as e:
+                logger.error(f"Failed to load ACE-Step GGUF model: {e}")
+                raise # Re-raise the exception to indicate failure
         return self.models["acestep"]
 
     async def get_asr(self):
