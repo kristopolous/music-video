@@ -22,7 +22,7 @@ uv pip install \
 # --- Build llama-cpp-python with HIPBLAS ---
 # gfx942: MI300A/MI325X,  gfx90a: MI200,  gfx1100: RX 7900 XT/XTX
 CMAKE_ARGS="-DLLAMA_HIPBLAS=1 -DAMDGPU_TARGETS=gfx942" \
-FORCE_CMAKE=1 pip install \
+FORCE_CMAKE=1 uv pip install \
     --force-reinstall \
     --no-cache-dir \
     --no-binary llama-cpp-python \
