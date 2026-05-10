@@ -13,13 +13,13 @@ fi
 source "$VENV/bin/activate"
 #pip install -U pip uv
 
-# --- Install PyTorch + friends with ROCm 6.2 ---
-# MI300A/X fully supported on ROCm 6.2+
+# --- Install PyTorch + friends with ROCm 6.3 ---
+# MI300A/X fully supported on ROCm 6.3+
 uv pip install \
-    torch==2.10.0+rocm6.2 \
-    torchvision==0.25.0+rocm6.2 \
-    torchaudio==2.10.0+rocm6.2 \
-    --index-url https://download.pytorch.org/whl/rocm6.2
+    torch==2.9.1+rocm6.3 \
+    torchvision==0.24.1+rocm6.3 \
+    torchaudio==2.9.1+rocm6.3 \
+    --index-url https://download.pytorch.org/whl/rocm6.3
 
 # --- Build llama-cpp-python with HIP support for ROCm ---
 uv pip install \
