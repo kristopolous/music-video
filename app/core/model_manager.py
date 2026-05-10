@@ -5,6 +5,15 @@ import asyncio
 
 logger = logging.getLogger(__name__)
 
+# Monkeypatch for ROCm torch: provide GroupName if missing (needed by diffusers)
+try:
+    import torch.distributed.distributed_c10d as c10d
+    if not hasattr(c10d, "GroupName"):
+        from typing import NewType
+        c10d.GroupName = NewType("GroupName", str)
+except Exception:
+    pass
+
 def detect_device() -> str:
     if torch.cuda.is_available():
         is_rocm = (
