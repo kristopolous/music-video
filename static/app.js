@@ -3,18 +3,16 @@ let currentProjectId = null;
 let eventSource = null;
 
 const STEP_CONFIG = {
-    'generate_lyrics': { title: 'Lyrics Generation', icon: '📝' },
-    'generate_song': { title: 'Music Composition', icon: '🎵' },
-    'extract_timestamps': { title: 'Timestamp Extraction', icon: '⏱️' },
-    'generate_scene_list': { title: 'Scene Breakdown', icon: '🎬' },
-    'generate_video_scenes': { title: 'Video Production', icon: '📽️' },
-    'finalize_video': { title: 'Final Mastering', icon: '✨' }
+    'generate_lyrics': { title: 'LYRICS GENERATION', number: '02', icon: '◆' },
+    'generate_song': { title: 'MUSIC COMPOSITION', number: '03', icon: '♦' },
+    'extract_timestamps': { title: 'TIMESTAMP EXTRACTION', number: '04', icon: '◇' },
+    'generate_scene_list': { title: 'SCENE BREAKDOWN', number: '05', icon: '◈' },
+    'generate_video_scenes': { title: 'VIDEO PRODUCTION', number: '06', icon: '◊' },
+    'finalize_video': { title: 'FINAL MASTERING', number: '07', icon: '★' }
 };
 
-// --- Initialization ---
 document.getElementById('btn-start').addEventListener('click', startProject);
 
-// --- Core Actions ---
 async function startProject() {
     const topic = document.getElementById('topic').value;
     const style = document.getElementById('style').value;
@@ -34,9 +32,10 @@ async function startProject() {
         const data = await response.json();
         currentProjectId = data.project_id;
         
-        // Hide inputs (optionally) or just mark active
         document.getElementById('row-inputs').classList.remove('active');
         document.getElementById('row-inputs').classList.add('completed');
+        const inputsProgress = document.querySelector('#row-inputs .progress-fill');
+        if (inputsProgress) inputsProgress.style.width = '100%';
         
         initializeTimeline();
         connectSSE(currentProjectId);
@@ -47,18 +46,18 @@ async function startProject() {
 
 function initializeTimeline() {
     const container = document.getElementById('dynamic-rows');
-    container.innerHTML = ''; // Clear previous if any
+    container.innerHTML = '';
     
-    Object.keys(STEP_CONFIG).forEach((stepName, index) => {
+    Object.keys(STEP_CONFIG).forEach((stepName) => {
         const template = document.getElementById('step-row-template');
         const clone = template.content.cloneNode(true);
         const section = clone.querySelector('section');
+        const config = STEP_CONFIG[stepName];
         
         section.id = `row-${stepName}`;
-        section.querySelector('.step-title').textContent = STEP_CONFIG[stepName].title;
-        section.querySelector('.step-status').textContent = STEP_CONFIG[stepName].icon;
+        section.querySelector('.step-title').textContent = config.title;
+        section.querySelector('.step-status').textContent = config.number;
         
-        // Setup buttons
         section.querySelector('.edit-btn').onclick = () => handleEdit(stepName);
         section.querySelector('.regen-btn').onclick = () => handleRegenerate(stepName);
         
@@ -82,29 +81,37 @@ function connectSSE(projectId) {
     };
 }
 
-// --- UI Updates ---
 function updateUI(project) {
     Object.entries(project.steps).forEach(([name, step]) => {
         const row = document.getElementById(`row-${name}`);
         if (!row) return;
 
-        // Update classes
         row.classList.remove('active', 'completed', 'failed');
         if (step.status === 'running') row.classList.add('active');
         if (step.status === 'completed') row.classList.add('completed');
         if (step.status === 'failed') row.classList.add('failed');
 
-        // Update progress
+        const statusEl = row.querySelector('.step-status');
+        const config = STEP_CONFIG[name];
+        
+        if (step.status === 'running') {
+            statusEl.innerHTML = '<span class="step-spinner"></span>';
+        } else if (step.status === 'completed') {
+            statusEl.textContent = config.icon;
+        } else if (step.status === 'failed') {
+            statusEl.textContent = '✕';
+        } else {
+            statusEl.textContent = config.number;
+        }
+
         const fill = row.querySelector('.progress-fill');
         fill.style.width = `${step.progress * 100}%`;
 
-        // Update content if data is present
         if (step.data) {
             renderStepData(name, step.data, row.querySelector('.content-display'));
         }
     });
 
-    // Auto-scroll to active row
     const activeRow = document.querySelector('.row.active');
     if (activeRow) {
         activeRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -126,17 +133,18 @@ function renderStepData(name, data, container) {
     else if (name === 'generate_song') {
         const audio = document.createElement('audio');
         audio.controls = true;
-        audio.src = `/${data}`; // Serves from /output
+        audio.src = `/${data}`;
         container.appendChild(audio);
     }
     else if (name === 'generate_scene_list') {
         const list = document.createElement('div');
         list.className = 'scene-list';
-        data.forEach(scene => {
+        data.forEach((scene, index) => {
             const item = document.createElement('div');
             item.className = 'scene-item';
+            const idx = String(index + 1).padStart(2, '0');
             item.innerHTML = `
-                <span class="scene-time">${scene.start.toFixed(2)}s - ${scene.end.toFixed(2)}s</span>
+                <span class="scene-time">[${idx}] ${scene.start.toFixed(2)}s — ${scene.end.toFixed(2)}s</span>
                 <p>${scene.description}</p>
             `;
             list.appendChild(item);
@@ -154,39 +162,48 @@ function renderStepData(name, data, container) {
     }
 }
 
-// --- Interactive Handlers ---
+let editingStep = null;
+
 async function handleEdit(stepName) {
     const row = document.getElementById(`row-${stepName}`);
     const display = row.querySelector('.content-display');
+
+    if (editingStep === stepName) {
+        const textarea = display.querySelector('textarea');
+        if (textarea) {
+            const newData = textarea.value;
+            await fetch(`${API_BASE}/${currentProjectId}/steps/${stepName}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ data: newData })
+            });
+            renderStepData(stepName, newData, display);
+        }
+        editingStep = null;
+        return;
+    }
+
     const project = await (await fetch(`${API_BASE}/${currentProjectId}`)).json();
     const currentData = project.steps[stepName].data;
+    const dataStr = typeof currentData === 'string' ? currentData : JSON.stringify(currentData, null, 2);
 
-    // Simple prompt for now, can be improved to inline textarea
-    const newData = prompt(`Edit ${STEP_CONFIG[stepName].title}:`, typeof currentData === 'string' ? currentData : JSON.stringify(currentData));
-    
-    if (newData !== null) {
-        let parsedData = newData;
-        try { parsedData = JSON.parse(newData); } catch(e) {}
+    display.innerHTML = `<textarea class="edit-textarea">${dataStr.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>`;
+    display.querySelector('textarea').focus();
+    editingStep = stepName;
 
-        await fetch(`${API_BASE}/${currentProjectId}/steps/${stepName}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ data: parsedData })
-        });
-        
-        // Refresh local UI content
-        renderStepData(stepName, parsedData, display);
-    }
+    display.querySelector('textarea').addEventListener('blur', () => {
+        if (editingStep === stepName) {
+            handleEdit(stepName);
+        }
+    });
 }
 
 async function handleRegenerate(stepName) {
-    if (!confirm(`Regenerate from ${STEP_CONFIG[stepName].title}? Downstream steps will be overwritten.`)) return;
+    if (!confirm(`REGENERATE FROM ${STEP_CONFIG[stepName].title}? DOWNSTREAM STEPS WILL BE OVERWRITTEN.`)) return;
 
     await fetch(`${API_BASE}/${currentProjectId}/regenerate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ from_step: stepName })
     });
-    
-    // UI will update automatically via SSE
 }

@@ -23,7 +23,7 @@ class RegenerateRequest(BaseModel):
 @router.post("/projects")
 async def create_project(data: ProjectCreate, background_tasks: BackgroundTasks):
     project_id = await orchestrator.create_project(data.topic, data.style, data.quality)
-    background_tasks.add_task(orchestrator.run_pipeline, project_id)
+    orchestrator.start_pipeline(project_id)
     return {"project_id": project_id}
 
 @router.get("/projects/{project_id}")
@@ -41,7 +41,6 @@ async def update_step(project_id: str, step_name: str, update: StepUpdate):
     if step_name not in project.steps:
         raise HTTPException(status_code=404, detail="Step not found")
     
-    # Update the data manually
     project.steps[step_name].data = update.data
     orchestrator._save_project(project_id)
     return project.steps[step_name]
@@ -50,8 +49,8 @@ async def update_step(project_id: str, step_name: str, update: StepUpdate):
 async def regenerate_project(project_id: str, req: RegenerateRequest, background_tasks: BackgroundTasks):
     if project_id not in orchestrator.projects:
         raise HTTPException(status_code=404, detail="Project not found")
-    
-    background_tasks.add_task(orchestrator.run_pipeline, project_id, start_at=req.from_step)
+
+    orchestrator.start_pipeline(project_id, start_at=req.from_step)
     return {"message": f"Regeneration started from {req.from_step or 'beginning'}"}
 
 @router.get("/projects/{project_id}/events")
@@ -64,8 +63,5 @@ async def project_events(project_id: str):
             while True:
                 data = await queue.get()
                 yield f"data: {json.dumps(data)}\n\n"
-                # We don't break here so the UI can stay connected for regenerations
-                # if data.get("status") in ["completed", "failed"]:
-                #     break
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

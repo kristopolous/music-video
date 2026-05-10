@@ -2,6 +2,7 @@ import asyncio
 import uuid
 import json
 import os
+import concurrent.futures
 from typing import Dict, List, Any, Optional
 from app.models.schemas import ProjectState, ProjectStatus, StepStatus, StepProgress, QualityLevel
 from app.core.steps.lyrics import GenerateLyricsStep
@@ -18,6 +19,7 @@ class Orchestrator:
     def __init__(self):
         self.projects: Dict[str, ProjectState] = {}
         self.streams: Dict[str, List[asyncio.Queue]] = {}
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
         self.persistence_dir = "projects"
         os.makedirs(self.persistence_dir, exist_ok=True)
         self._load_projects()
@@ -49,7 +51,7 @@ class Orchestrator:
             "generate_video_scenes",
             "finalize_video"
         ]
-        
+
         project = ProjectState(
             project_id=project_id,
             topic=topic,
@@ -74,30 +76,34 @@ class Orchestrator:
             if project_id in self.streams:
                 self.streams[project_id].remove(queue)
 
-    async def broadcast(self, project_id: str, message: Any):
+    def _broadcast_sync(self, project_id: str, message: Any):
+        """Thread-safe broadcast that schedules onto the event loop."""
         if project_id in self.streams:
             for queue in self.streams[project_id]:
-                await queue.put(message)
+                if self._loop:
+                    self._loop.call_soon_threadsafe(queue.put_nowait, message)
 
-    async def update_step(self, project_id: str, step_name: str, status: StepStatus, message: str, progress: float, data: Any = None):
-        project = self.projects[project_id]
-        project.current_step = step_name
-        step = project.steps[step_name]
-        step.status = status
-        step.message = message
-        step.progress = progress
-        if data is not None:
-            step.data = data
-        
-        self._save_project(project_id)
-        await self.broadcast(project_id, project.dict())
+    def start_pipeline(self, project_id: str, start_at: Optional[str] = None):
+        """Run the pipeline in a thread, never blocking the event loop."""
+        self._loop = asyncio.get_running_loop()
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+        executor.submit(self._run_pipeline_sync, project_id, start_at)
+
+    def _run_pipeline_sync(self, project_id: str, start_at: Optional[str] = None):
+        """Synchronous pipeline runner for execution in a thread."""
+        import asyncio
+        new_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(new_loop)
+        try:
+            new_loop.run_until_complete(self.run_pipeline(project_id, start_at))
+        finally:
+            new_loop.close()
 
     async def run_pipeline(self, project_id: str, start_at: Optional[str] = None):
         project = self.projects[project_id]
         project.status = ProjectStatus.PROCESSING
-        await self.broadcast(project_id, project.dict())
+        self._broadcast_sync(project_id, project.dict())
 
-        # Reconstruct context from previous steps if starting mid-way
         context = {
             "topic": project.topic,
             "style": project.style,
@@ -105,8 +111,7 @@ class Orchestrator:
             "project_id": project_id,
             "video_list": []
         }
-        
-        # Populate context from completed steps
+
         if project.steps["generate_lyrics"].data: context["lyrics"] = project.steps["generate_lyrics"].data
         if project.steps["generate_song"].data: context["song_path"] = project.steps["generate_song"].data
         if project.steps["extract_timestamps"].data: context["lyrics_with_timestamps"] = project.steps["extract_timestamps"].data
@@ -125,63 +130,72 @@ class Orchestrator:
             run = False
             if start_at is None: run = True
 
-            # 1. Lyrics
             if not run and start_at == "generate_lyrics": run = True
             if run:
                 result = await GenerateLyricsStep("generate_lyrics", self).run(project_id, context)
-                await self.update_step(project_id, "generate_lyrics", StepStatus.COMPLETED, "Lyrics generated", 1.0, data=result)
+                await self._update_step(project_id, "generate_lyrics", StepStatus.COMPLETED, "Lyrics generated", 1.0, data=result)
 
-            # 2. Song
             if not run and start_at == "generate_song": run = True
             if run:
                 result = await GenerateSongStep("generate_song", self).run(project_id, context)
-                await self.update_step(project_id, "generate_song", StepStatus.COMPLETED, "Song generated", 1.0, data=result)
+                await self._update_step(project_id, "generate_song", StepStatus.COMPLETED, "Song generated", 1.0, data=result)
 
-            # 3. Timestamps
             if not run and start_at == "extract_timestamps": run = True
             if run:
                 result = await ExtractTimestampsStep("extract_timestamps", self).run(project_id, context)
-                await self.update_step(project_id, "extract_timestamps", StepStatus.COMPLETED, "Timestamps extracted", 1.0, data=result)
+                await self._update_step(project_id, "extract_timestamps", StepStatus.COMPLETED, "Timestamps extracted", 1.0, data=result)
 
-            # 4. Scene List
             if not run and start_at == "generate_scene_list": run = True
             if run:
                 result = await GenerateSceneListStep("generate_scene_list", self).run(project_id, context)
-                await self.update_step(project_id, "generate_scene_list", StepStatus.COMPLETED, "Scene list generated", 1.0, data=result)
+                await self._update_step(project_id, "generate_scene_list", StepStatus.COMPLETED, "Scene list generated", 1.0, data=result)
 
-            # 5. Scene-by-Scene Loop
             if not run and start_at == "generate_video_scenes": run = True
             if run:
                 scene_list = context["scene_list"]
-                context["video_list"] = [] # Reset video list if regenerating scenes
+                context["video_list"] = []
                 for i, scene in enumerate(scene_list):
                     scene_context = context.copy()
                     scene_context["current_scene"] = scene
                     scene_context["scene_index"] = i
-                    
+
                     msg = f"Processing scene {i+1}/{len(scene_list)}: {scene['description']} ({scene['end']-scene['start']:.2f}s)"
-                    await self.update_step(project_id, "generate_video_scenes", StepStatus.RUNNING, msg, (i/len(scene_list)))
+                    await self._update_step(project_id, "generate_video_scenes", StepStatus.RUNNING, msg, (i/len(scene_list)))
 
                     await BraveSearchStep("search_assets_internal", self).run(project_id, scene_context)
                     video_clip = await GenerateVideoStep("generate_video_internal", self).run(project_id, scene_context)
                     context["video_list"].append(video_clip)
 
-                await self.update_step(project_id, "generate_video_scenes", StepStatus.COMPLETED, "All scenes generated", 1.0, data=context["video_list"])
+                await self._update_step(project_id, "generate_video_scenes", StepStatus.COMPLETED, "All scenes generated", 1.0, data=context["video_list"])
 
-            # 6. Finalize
             if not run and start_at == "finalize_video": run = True
             if run:
-                await self.update_step(project_id, "finalize_video", StepStatus.RUNNING, "Merging scenes and applying high-quality audio...", 0.5)
-                # FFmpeg merge logic here
-                await asyncio.sleep(2) 
-                final_video_path = f"output/{project_id}/final_video.mp4" # Placeholder
-                await self.update_step(project_id, "finalize_video", StepStatus.COMPLETED, "Project completed!", 1.0, data=final_video_path)
+                await self._update_step(project_id, "finalize_video", StepStatus.RUNNING, "Merging scenes and applying high-quality audio...", 0.5)
+                await asyncio.sleep(2)
+                final_video_path = f"output/{project_id}/final_video.mp4"
+                await self._update_step(project_id, "finalize_video", StepStatus.COMPLETED, "Project completed!", 1.0, data=final_video_path)
 
             project.status = ProjectStatus.COMPLETED
-            await self.broadcast(project_id, project.dict())
+            self._broadcast_sync(project_id, project.dict())
         except Exception as e:
             logger.error(f"Pipeline failed for {project_id}: {e}")
             project.status = ProjectStatus.FAILED
-            await self.broadcast(project_id, project.dict())
+            self._broadcast_sync(project_id, project.dict())
+
+    async def _update_step(self, project_id: str, step_name: str, status: StepStatus, message: str, progress: float, data: Any = None):
+        project = self.projects[project_id]
+        project.current_step = step_name
+        step = project.steps[step_name]
+        step.status = status
+        step.message = message
+        step.progress = progress
+        if data is not None:
+            step.data = data
+
+        self._save_project(project_id)
+        self._broadcast_sync(project_id, project.dict())
+
+    async def update_step(self, project_id: str, step_name: str, status: StepStatus, message: str, progress: float, data: Any = None):
+        await self._update_step(project_id, step_name, status, message, progress, data)
 
 orchestrator = Orchestrator()

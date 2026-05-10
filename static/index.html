@@ -3,64 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Music Video Automator</title>
+    <title>MUSIC VIDEO AUTOMATOR</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="app">
         <header>
-            <h1>Music Video Automator</h1>
-            <p>From prompt to production.</p>
+            <h1>MUSIC VIDEO AUTOMATOR</h1>
+            <p>PROMPT TO PRODUCTION</p>
         </header>
 
         <main id="timeline">
-            <!-- Row 1: Inputs -->
             <section class="row active" id="row-inputs">
                 <div class="row-header">
-                    <span class="step-number">1</span>
-                    <h2>Project Configuration</h2>
+                    <span class="step-number">01</span>
                 </div>
                 <div class="row-content">
+                    <h2>PROJECT CONFIGURATION</h2>
                     <div class="input-group">
-                        <label for="topic">Topic</label>
+                        <label for="topic">TOPIC</label>
                         <textarea id="topic" placeholder="e.g., A rousing march celebrating Fremont California"></textarea>
                     </div>
                     <div class="input-group">
-                        <label for="style">Style</label>
+                        <label for="style">STYLE</label>
                         <textarea id="style" placeholder="e.g., 1950s big band with a chorus, horns, and a harp solo"></textarea>
                     </div>
                     <div class="input-group">
-                        <label for="quality">Quality</label>
+                        <label for="quality">QUALITY</label>
                         <select id="quality">
-                            <option value="low">Low (Fast Preview)</option>
-                            <option value="medium" selected>Medium</option>
-                            <option value="high">High (Production)</option>
+                            <option value="low">LOW — FAST PREVIEW</option>
+                            <option value="medium" selected>MEDIUM</option>
+                            <option value="high">HIGH — PRODUCTION</option>
                         </select>
                     </div>
-                    <button id="btn-start" class="primary-btn">Start Production</button>
+                    <button id="btn-start" class="primary-btn">START PRODUCTION</button>
                 </div>
+                <div class="step-progress-bar"><div class="progress-fill"></div></div>
             </section>
 
-            <!-- Dynamic Rows will be injected here -->
             <div id="dynamic-rows"></div>
         </main>
     </div>
 
-    <!-- Templates for Dynamic Rows -->
     <template id="step-row-template">
         <section class="row">
             <div class="row-header">
-                <span class="step-status"></span>
+                <span class="step-indicator"><span class="step-status"></span></span>
                 <h2 class="step-title"></h2>
-                <div class="step-progress-bar"><div class="progress-fill"></div></div>
             </div>
             <div class="row-content">
                 <div class="content-display"></div>
                 <div class="row-actions">
-                    <button class="edit-btn">Edit</button>
-                    <button class="regen-btn">Regenerate From Here</button>
+                    <button class="edit-btn">EDIT</button>
+                    <button class="regen-btn">REGENERATE FROM HERE</button>
                 </div>
             </div>
+            <div class="step-progress-bar"><div class="progress-fill"></div></div>
         </section>
     </template>
 
