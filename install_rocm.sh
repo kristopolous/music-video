@@ -11,7 +11,7 @@ if [ ! -d "$VENV" ]; then
     python3 -m venv "$VENV"
 fi
 source "$VENV/bin/activate"
-pip install -U pip uv
+#pip install -U pip uv
 
 # --- Install PyTorch + friends with ROCm 6.2 ---
 # MI300A/X fully supported on ROCm 6.2+
