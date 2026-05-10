@@ -19,9 +19,9 @@ uv pip install \
     torchaudio==2.9.1+rocm6.3 \
     --index-url https://download.pytorch.org/whl/rocm6.3
 
-# --- Build llama-cpp-python with HIP (use pip directly to force source build) ---
-# MI300A = gfx942. FORCE_CMAKE=1 forces cmake reconfigure.
-CMAKE_ARGS="-DGGML_HIPBLAS=on -DCMAKE_C_COMPILER=hipcc -DCMAKE_CXX_COMPILER=hipcc -DAMDGPU_TARGETS=gfx942" \
+# --- Build llama-cpp-python with HIPBLAS ---
+# gfx942: MI300A/MI325X,  gfx90a: MI200,  gfx1100: RX 7900 XT/XTX
+CMAKE_ARGS="-DLLAMA_HIPBLAS=1 -DAMDGPU_TARGETS=gfx942" \
 FORCE_CMAKE=1 pip install \
     --force-reinstall \
     --no-cache-dir \
