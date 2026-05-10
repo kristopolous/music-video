@@ -5,6 +5,13 @@ import asyncio
 
 logger = logging.getLogger(__name__)
 
+def detect_device() -> str:
+    if torch.cuda.is_available():
+        return "cuda"
+    if hasattr(torch, "xpu") and torch.xpu.is_available():
+        return "xpu"
+    return "cpu"
+
 class ModelManager:
     _instance = None
 
@@ -31,7 +38,7 @@ class ModelManager:
                 return Llama(
                     model_path=path,
                     n_gpu_layers=-1,
-                    n_ctx=4096,
+                    n_ctx=32768,
                     verbose=False
                 )
 
@@ -77,7 +84,7 @@ class ModelManager:
                 torch_dtype=torch.bfloat16,
                 trust_remote_code=True
             )
-            pipe.to("cuda")
+            pipe.to(detect_device())
             self.models["ltx"] = pipe
         return self.models["ltx"]
 
@@ -103,7 +110,16 @@ class ModelManager:
                 status, ok = dit_handler.initialize_service(
                     project_root=project_root,
                     config_path="acestep-v15-turbo",
-                    device="cuda",
+                    device=detect_device(),
+                    offload_to_cpu=gpu_config.gpu_memory_gb < 16,
+                )
+
+            def _init_lm():
+                status, ok = llm_handler.initialize(
+                    checkpoint_dir=checkpoint_dir,
+                    lm_model_path="acestep-5Hz-lm-1.7B",
+                    backend=gpu_config.recommended_backend,
+                    device=detect_device(),
                     offload_to_cpu=gpu_config.gpu_memory_gb < 16,
                 )
                 if not ok:

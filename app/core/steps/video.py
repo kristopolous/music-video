@@ -4,7 +4,7 @@ import asyncio
 import os
 from diffusers.utils import export_to_video
 from app.core.steps.base import BaseStep
-from app.core.model_manager import model_manager
+from app.core.model_manager import model_manager, detect_device
 from app.models.schemas import QualityLevel
 
 class GenerateVideoStep(BaseStep):
