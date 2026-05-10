@@ -11,7 +11,7 @@ if [ ! -d "$VENV" ]; then
     python3 -m venv "$VENV"
 fi
 source "$VENV/bin/activate"
-pip install -U pip uv
+#pip install -U pip uv
 
 # --- Install PyTorch + friends with ROCm 6.3 ---
 # MI300A/X fully supported on ROCm 6.3+
@@ -32,8 +32,17 @@ uv pip install \
 uv pip install -r "$ROOT_DIR/requirements.txt"
 uv pip install qwen-asr
 
-# --- Install ACE-Step editable ---
-uv pip install -e "$ROOT_DIR/ACE-Step-1.5"
+# --- ACE-Step's deps hardcode CUDA torch, so install its non-torch deps separately ---
+uv pip install -r "$ROOT_DIR/ACE-Step-1.5/requirements-rocm-linux.txt"
+uv pip install --no-deps -e "$ROOT_DIR/ACE-Step-1.5"
+
+# --- Re-pin ROCm torch (ACE-Step deps may have pulled in CUDA versions) ---
+uv pip install \
+    --force-reinstall \
+    torch==2.9.1+rocm6.3 \
+    torchvision==0.24.1+rocm6.3 \
+    torchaudio==2.9.1+rocm6.3 \
+    --index-url https://download.pytorch.org/whl/rocm6.3
 
 echo "=== ROCm install complete ==="
 echo "Activate with: source $VENV/bin/activate"
