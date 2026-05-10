@@ -55,12 +55,25 @@ class ModelManager:
                 )
 
             def _load(path):
-                return Llama(
-                    model_path=path,
-                    n_gpu_layers=-1,
-                    n_ctx=32768,
-                    verbose=False
+                is_rocm = (
+                    hasattr(torch.version, "hip")
+                    and torch.version.hip is not None
                 )
+                
+                llama_params = {
+                    "model_path": path,
+                    "n_gpu_layers": -1,
+                    "n_ctx": 32768,
+                    "verbose": False,
+                }
+                
+                if is_rocm:
+                    llama_params["n_gpu_layers"] = -1
+                    llama_params["main_gpu"] = 0
+                    llama_params["tensor_split"] = None
+                    logger.info("Configuring llama-cpp for AMD ROCm GPU inference")
+                
+                return Llama(**llama_params)
 
             path = await asyncio.to_thread(_download)
             logger.info(f"Loading Qwen3.6 GGUF from {path}...")
@@ -133,15 +146,6 @@ class ModelManager:
                     device=detect_device(),
                     offload_to_cpu=gpu_config.gpu_memory_gb < 16,
                 )
-
-            def _init_lm():
-                status, ok = llm_handler.initialize(
-                    checkpoint_dir=checkpoint_dir,
-                    lm_model_path="acestep-5Hz-lm-1.7B",
-                    backend=gpu_config.recommended_backend,
-                    device=detect_device(),
-                    offload_to_cpu=gpu_config.gpu_memory_gb < 16,
-                )
                 if not ok:
                     raise RuntimeError(f"DiT init failed: {status}")
                 return status
@@ -169,7 +173,7 @@ class ModelManager:
                         checkpoint_dir=checkpoint_dir,
                         lm_model_path="acestep-5Hz-lm-1.7B",
                         backend=gpu_config.recommended_backend,
-                        device="cuda",
+                        device=detect_device(),
                         offload_to_cpu=gpu_config.gpu_memory_gb < 16,
                     )
                     if not ok:
