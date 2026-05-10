@@ -41,44 +41,110 @@ class ModelManager:
             cls._instance.models = {}
         return cls._instance
 
-    async def get_qwen(self):
+    async def get_qwen(self, prefer_transformers: bool = False):
         if "qwen" not in self.models:
-            from llama_cpp import Llama
             from huggingface_hub import hf_hub_download
+
+            is_rocm = (
+                hasattr(torch.version, "hip")
+                and torch.version.hip is not None
+            )
+            device = detect_device()
+            use_gpu = device == "cuda"
+
+            path = await asyncio.to_thread(
+                hf_hub_download,
+                repo_id="unsloth/Qwen3.6-35B-A3B-GGUF",
+                filename="Qwen3.6-35B-A3B-UD-Q4_K_S.gguf",
+                local_dir="models"
+            )
+            logger.info(f"Loading Qwen3.6 GGUF from {path} on device: {device}")
+
+            if use_gpu and not prefer_transformers:
+                try:
+                    self.models["qwen"] = await self._load_llama_cpp_gpu(path, is_rocm)
+                except Exception as e:
+                    logger.warning(f"llama-cpp GPU load failed: {e}, falling back to transformers")
+                    self.models["qwen"] = await self.get_qwen_transformers()
+            elif use_gpu and prefer_transformers:
+                self.models["qwen"] = await self.get_qwen_transformers()
+            else:
+                self.models["qwen"] = await self._load_llama_cpp_cpu(path)
+                logger.warning("Qwen loaded on CPU - inference will be slow")
+
+        return self.models["qwen"]
+
+    async def _load_llama_cpp_gpu(self, path: str, is_rocm: bool):
+        from llama_cpp import Llama
+        import asyncio
+
+        def _load():
+            llama_params = {
+                "model_path": path,
+                "n_gpu_layers": -1,
+                "n_ctx": 32768,
+                "verbose": False,
+            }
+
+            if is_rocm:
+                llama_params["main_gpu"] = 0
+                llama_params["tensor_split"] = None
+                llama_params["use_mmap"] = True
+                llama_params["use_mlock"] = False
+                logger.info("Configuring llama-cpp for AMD ROCm GPU inference")
+
+            llm = Llama(**llama_params)
+
+            gpu_layers = getattr(llm, "n_gpu_layers", -1) if hasattr(llm, "n_gpu_layers") else -1
+            if hasattr(llm, "model") and hasattr(llm.model, "n_tokens"):
+                logger.info(f"llama-cpp loaded with n_gpu_layers={gpu_layers}")
+            logger.info(f"Qwen GGUF ready on {'ROCm' if is_rocm else 'CUDA'} GPU")
+
+            return llm
+
+        return await asyncio.to_thread(_load)
+
+    async def _load_llama_cpp_cpu(self, path: str):
+        from llama_cpp import Llama
+        import asyncio
+
+        def _load():
+            return Llama(
+                model_path=path,
+                n_gpu_layers=0,
+                n_ctx=32768,
+                verbose=False,
+            )
+
+        return await asyncio.to_thread(_load)
+
+    async def get_qwen_transformers(self):
+        if "qwen_transformers" not in self.models:
+            logger.info("Loading Qwen3.6-35B via transformers on GPU...")
+            from transformers import AutoModelForCausalLM, AutoTokenizer
             import asyncio
 
-            def _download():
-                return hf_hub_download(
-                    repo_id="unsloth/Qwen3.6-35B-A3B-GGUF",
-                    filename="Qwen3.6-35B-A3B-UD-Q4_K_S.gguf",
-                    local_dir="models"
-                )
+            device = detect_device()
+            dtype = torch.bfloat16 if device == "cuda" else torch.float32
 
-            def _load(path):
-                is_rocm = (
-                    hasattr(torch.version, "hip")
-                    and torch.version.hip is not None
+            def _load():
+                tokenizer = AutoTokenizer.from_pretrained(
+                    "Qwen/Qwen3-35B",
+                    trust_remote_code=True
                 )
-                
-                llama_params = {
-                    "model_path": path,
-                    "n_gpu_layers": -1,
-                    "n_ctx": 32768,
-                    "verbose": False,
-                }
-                
-                if is_rocm:
-                    llama_params["n_gpu_layers"] = -1
-                    llama_params["main_gpu"] = 0
-                    llama_params["tensor_split"] = None
-                    logger.info("Configuring llama-cpp for AMD ROCm GPU inference")
-                
-                return Llama(**llama_params)
+                model = AutoModelForCausalLM.from_pretrained(
+                    "Qwen/Qwen3-35B",
+                    torch_dtype=dtype,
+                    device_map="auto",
+                    trust_remote_code=True
+                )
+                return model, tokenizer
 
-            path = await asyncio.to_thread(_download)
-            logger.info(f"Loading Qwen3.6 GGUF from {path}...")
-            self.models["qwen"] = await asyncio.to_thread(_load, path)
-        return self.models["qwen"]
+            model, tokenizer = await asyncio.to_thread(_load)
+            self.models["qwen_transformers"] = (model, tokenizer)
+            logger.info(f"Qwen transformers ready on {device}")
+
+        return self.models["qwen_transformers"]
 
     async def get_asr(self):
         if "asr" not in self.models:
