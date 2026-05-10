@@ -21,10 +21,10 @@ uv pip install \
     --index-url https://download.pytorch.org/whl/cu128
 
 # --- Install llama-cpp-python with CUDA ---
-# Build from source with CUDA support
-CMAKE_ARGS="-DGGML_CUDA=on" uv pip install \
+CMAKE_ARGS="-DGGML_CUDA=on" \
+uv pip install \
     --force-reinstall \
-    --no-build-isolation \
+    --no-deps \
     "llama-cpp-python==0.3.22"
 
 # --- Install project dependencies (minus torch/llama which are already handled) ---

@@ -11,7 +11,7 @@ if [ ! -d "$VENV" ]; then
     python3 -m venv "$VENV"
 fi
 source "$VENV/bin/activate"
-#pip install -U pip uv
+pip install -U pip uv
 
 # --- Install PyTorch + friends with ROCm 6.3 ---
 # MI300A/X fully supported on ROCm 6.3+
@@ -22,12 +22,11 @@ uv pip install \
     --index-url https://download.pytorch.org/whl/rocm6.3
 
 # --- Build llama-cpp-python with HIP support for ROCm ---
+CMAKE_ARGS="-DGGML_HIPBLAS=on -DCMAKE_C_COMPILER=hipcc -DCMAKE_CXX_COMPILER=hipcc" \
 uv pip install \
     --force-reinstall \
     --no-deps \
-    "llama-cpp-python==0.3.22" \
-    --config-settings=cmake.args="-DGGML_HIPBLAS=on;-DCMAKE_C_COMPILER=hipcc;-DCMAKE_CXX_COMPILER=hipcc" \
-    --no-build-isolation
+    "llama-cpp-python==0.3.22"
 
 # --- Install project dependencies ---
 uv pip install -r "$ROOT_DIR/requirements.txt"
