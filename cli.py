@@ -4,7 +4,7 @@ import json
 import asyncio
 from typing import Optional
 
-app = typer.Typer()
+app = typer.Typer(add_completion=False)
 
 API_URL = "http://127.0.0.1:8000"
 

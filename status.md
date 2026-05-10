@@ -21,7 +21,7 @@
 - **Quality Tiers**: Implemented `low`, `medium`, and `high` settings that adjust model steps and resolutions for faster iteration.
 
 ### 4. Interfaces
-- **CLI**: A `cli.py` tool for starting projects and watching progress in the terminal.
+- **CLI**: A `cli.py` tool for starting projects and watching progress in the terminal. (Updated to disable shell completion to prevent hanging on --help).
 - **Web UI**: A stylish, Vanilla JS/HTML/CSS interface featuring a vertical interactive timeline, real-time progress, and "Regenerate" capabilities.
 
 ### 5. Advanced Features
