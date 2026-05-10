@@ -20,8 +20,9 @@ uv pip install \
     --index-url https://download.pytorch.org/whl/rocm6.3
 
 # --- Build llama-cpp-python with HIP (use pip directly to force source build) ---
-CMAKE_ARGS="-DGGML_HIPBLAS=on -DCMAKE_C_COMPILER=hipcc -DCMAKE_CXX_COMPILER=hipcc" \
-pip install \
+# MI300A = gfx942. FORCE_CMAKE=1 forces cmake reconfigure.
+CMAKE_ARGS="-DGGML_HIPBLAS=on -DCMAKE_C_COMPILER=hipcc -DCMAKE_CXX_COMPILER=hipcc -DAMDGPU_TARGETS=gfx942" \
+FORCE_CMAKE=1 pip install \
     --force-reinstall \
     --no-cache-dir \
     --no-binary llama-cpp-python \

@@ -1,7 +1,18 @@
+import os
+import torch
+
+# Monkeypatch ROCm torch: provide GroupName if missing (needed by diffusers)
+try:
+    import torch.distributed.distributed_c10d as c10d
+    if not hasattr(c10d, "GroupName"):
+        from typing import NewType
+        c10d.GroupName = NewType("GroupName", str)
+except Exception:
+    pass
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from app.api.routes import router
-import os
 
 app = FastAPI(title="Music Video Automation API")
 
