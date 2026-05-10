@@ -8,11 +8,6 @@ typer
 transformers
 diffusers
 accelerate
-torch
 scipy
 pillow
-llama-cpp-python
-unsloth
 huggingface_hub
-torchaudio
-qwen-asr

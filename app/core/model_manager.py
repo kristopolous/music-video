@@ -7,9 +7,20 @@ logger = logging.getLogger(__name__)
 
 def detect_device() -> str:
     if torch.cuda.is_available():
+        is_rocm = (
+            hasattr(torch.version, "hip")
+            and torch.version.hip is not None
+        )
+        if is_rocm:
+            logger.info(f"ROCm device detected (HIP {torch.version.hip})")
+        else:
+            cuda_ver = torch.version.cuda or "unknown"
+            logger.info(f"CUDA device detected (CUDA {cuda_ver})")
         return "cuda"
     if hasattr(torch, "xpu") and torch.xpu.is_available():
+        logger.info("Intel XPU device detected")
         return "xpu"
+    logger.warning("No GPU detected — falling back to CPU")
     return "cpu"
 
 class ModelManager:
